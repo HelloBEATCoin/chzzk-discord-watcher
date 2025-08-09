@@ -1,0 +1,26 @@
+# Configuration for Chzzk Discord watcher
+
+# Poll interval in seconds. 300 seconds = 5 minutes.
+poll_interval_seconds: 300
+
+# Viewer thresholds at which to send celebratory messages.  These should be
+# ascending numbers.  Modify as desired.
+viewer_thresholds: [100, 300, 500, 1000]
+
+# List of streamers to monitor.  Each entry must include:
+#   name: Friendly display name used in notifications
+#   channel_id: Chzzk channel identifier (GUID-like string)
+#   chzzk_url: URL to the channel homepage on chzzk.naver.com
+#   webhook_url: Discord webhook URL or placeholder ${ENV_VAR}
+#   discord_role_id: Optional role ID to mention (omit or set null to disable)
+streamers:
+  - name: 믕비
+    channel_id: a872c0594e60f943748d76c565dd3a07
+    chzzk_url: https://chzzk.naver.com/a872c0594e60f943748d76c565dd3a07
+    webhook_url: ${WEBHOOK_MBEUNG}
+    discord_role_id: null
+  - name: 나리
+    channel_id: 1755e5012c4dcd4eb94aec03205d6201
+    chzzk_url: https://chzzk.naver.com/1755e5012c4dcd4eb94aec03205d6201
+    webhook_url: ${WEBHOOK_NARI}
+    discord_role_id: null
