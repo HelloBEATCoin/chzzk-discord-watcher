@@ -4,13 +4,17 @@
     "title": null,
     "category": null,
     "viewers": null,
-    "passed_thresholds": []
+    "passed_thresholds": [],
+    "last_nonempty_title": null,
+    "last_nonempty_category": null
   },
   "a872c0594e60f943748d76c565dd3a07": {
     "is_live": false,
     "title": null,
     "category": null,
     "viewers": null,
-    "passed_thresholds": []
+    "passed_thresholds": [],
+    "last_nonempty_title": null,
+    "last_nonempty_category": null
   }
 }
