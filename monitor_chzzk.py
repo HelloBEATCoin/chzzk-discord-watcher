@@ -73,6 +73,8 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
             "(KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
         ),
         "Accept": "application/json",
+        "Accept-Language": "ko,en;q=0.8",
+        "Cache-Control": "no-cache",
     }
 
     # First attempt: service/v1/channels/{id}/live-detail
@@ -143,6 +145,58 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
 
     # Default: offline
     return {"is_live": False}
+
+
+async def enrich_live_meta(
+    session: aiohttp.ClientSession,
+    channel_id: str,
+    tries: int = 4,
+    delay: float = 2.0,
+):
+    """
+    title/category가 비어 있을 때 짧게 재시도하며 채워 넣는다.
+    live-detail 우선, 없으면 live-status 폴백. (점증 백오프)
+    """
+    base = "https://api.chzzk.naver.com"
+    headers = {
+        "Referer": "https://chzzk.naver.com/",
+        "Origin": "https://chzzk.naver.com",
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json",
+        "Accept-Language": "ko,en;q=0.8",
+        "Cache-Control": "no-cache",
+    }
+    for i in range(tries):
+        title = None
+        category = None
+        # 1) live-detail
+        try:
+            async with session.get(f"{base}/service/v1/channels/{channel_id}/live-detail", headers=headers, timeout=10) as r:
+                if r.status == 200:
+                    d = await r.json()
+                    c = d.get("content") or {}
+                    title = c.get("liveTitle") or c.get("title")
+                    category = c.get("liveCategoryValue") or c.get("videoCategoryValue") or c.get("categoryType") or c.get("liveCategory")
+        except Exception:
+            pass
+        # 2) live-status (보강)
+        if not title or not category:
+            try:
+                async with session.get(f"{base}/polling/v2/channels/{channel_id}/live-status", headers=headers, timeout=10) as r:
+                    if r.status == 200:
+                        d = await r.json()
+                        c = d.get("content") or {}
+                        title = title or c.get("liveTitle")
+                        category = category or c.get("liveCategoryValue") or c.get("liveCategory")
+            except Exception:
+                pass
+        if title or category:
+            return title, category
+        await asyncio.sleep(delay * (i + 1))  # 2s, 4s, 6s...
+    return None, None
 
 
 def load_config(path: Path) -> Dict[str, Any]:
@@ -261,6 +315,18 @@ async def process_streamer(session: aiohttp.ClientSession, streamer: Dict[str, A
     }
     events: List[Dict[str, Any]] = []
 
+    # --- 마지막 비어있지 않은 메타 보존 ---
+    last_title_nonempty = last.get("last_nonempty_title")
+    last_cat_nonempty = last.get("last_nonempty_category")
+    cur_title = current.get("title")
+    cur_cat = current.get("category")
+    if cur_title:
+        last_title_nonempty = cur_title
+    if cur_cat:
+        last_cat_nonempty = cur_cat
+    new_state["last_nonempty_title"] = last_title_nonempty
+    new_state["last_nonempty_category"] = last_cat_nonempty
+
     # Determine start/end events
     if last.get("is_live"):
         if not new_state["is_live"]:
@@ -271,7 +337,7 @@ async def process_streamer(session: aiohttp.ClientSession, streamer: Dict[str, A
             # Started
             events.append({"type": "start"})
 
-    # Title change detection (only when live)
+    # Title/category change detection (only when live)
     if new_state["is_live"] and last.get("is_live"):
         new_title = current.get("title")
         if new_title and new_title != last.get("title"):
@@ -304,11 +370,37 @@ async def process_streamer(session: aiohttp.ClientSession, streamer: Dict[str, A
                 for th in sorted(to_pass):
                     events.append({"type": "threshold_cross", "threshold": th})
 
-    # Send notifications for each event
+    # --- 알림 메시지에 쓸 메타 보강 ---
+    # 시작 이벤트가 있으면 즉시 보강 시도 (짧은 재시도)
+    has_start = any(ev["type"] == "start" for ev in events)
+    if has_start and (not current.get("title") or not current.get("category")):
+        t, c = await enrich_live_meta(session, channel_id)
+        if t and not current.get("title"):
+            current["title"] = t
+        if c and not current.get("category"):
+            current["category"] = c
+
+    def build_current_for_msg(ev_type: str) -> Dict[str, Any]:
+        """이벤트별로 표시용 메타를 채워 넣는다."""
+        cur = dict(current)  # shallow copy
+        if ev_type == "end":
+            # 종료 시 실시간 API는 비어있을 수 있으니 마지막 비어있지 않은 값 사용
+            cur["title"] = new_state.get("last_nonempty_title") or new_state.get("title")
+            cur["category"] = new_state.get("last_nonempty_category") or new_state.get("category")
+        else:
+            # 시작/변경 이벤트: 없으면 상태에 남아있는 값으로라도 채움
+            if not cur.get("title"):
+                cur["title"] = new_state.get("last_nonempty_title") or new_state.get("title")
+            if not cur.get("category"):
+                cur["category"] = new_state.get("last_nonempty_category") or new_state.get("category")
+        return cur
+
+    # Send notifications for each event (with enriched meta)
     webhook = streamer.get("webhook_url")
     if webhook and events:
         for ev in events:
-            msg = format_discord_message(ev["type"], streamer, current, last, ev.get("threshold"))
+            info_for_msg = build_current_for_msg(ev["type"])
+            msg = format_discord_message(ev["type"], streamer, info_for_msg, last, ev.get("threshold"))
             await send_discord_message(session, webhook, msg["content"], msg["embed"])
             # Slight delay between messages to avoid Discord rate limits
             await asyncio.sleep(1)
