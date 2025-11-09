@@ -27,6 +27,7 @@ jobs:
         env:
           WEBHOOK_MBEUNG: ${{ secrets.WEBHOOK_MBEUNG }}
           WEBHOOK_NARI: ${{ secrets.WEBHOOK_NARI }}
+          WEBHOOK_YEONSOHWA: ${{ secrets.WEBHOOK_YEONSOHWA }}
           STATE_PATH: state.json
         run: |
           python monitor_chzzk.py config.yaml &   # 즉시 1회 실행
