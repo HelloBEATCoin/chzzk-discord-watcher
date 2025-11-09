@@ -24,3 +24,8 @@ streamers:
     chzzk_url: https://chzzk.naver.com/1755e5012c4dcd4eb94aec03205d6201
     webhook_url: ${WEBHOOK_NARI}
     discord_role_id: null
+  - name: 연소화
+    channel_id: bc630aa88c2753dbac14a09fd4901890
+    chzzk_url: https://chzzk.naver.com/bc630aa88c2753dbac14a09fd4901890
+    webhook_url: ${WEBHOOK_YEONSOHWA}
+    discord_role_id: null
