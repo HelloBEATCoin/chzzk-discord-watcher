@@ -1,6 +1,6 @@
 {
   "1755e5012c4dcd4eb94aec03205d6201": {
-    "is_live": true,
+    "is_live": false,
     "title": null,
     "category": null,
     "viewers": null,
@@ -18,7 +18,7 @@
     "last_nonempty_category": null
   },
   "bc630aa88c2753dbac14a09fd4901890": {
-    "is_live": false,
+    "is_live": true,
     "title": null,
     "category": null,
     "viewers": null,
