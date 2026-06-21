@@ -18,7 +18,7 @@
     "last_nonempty_category": null
   },
   "bc630aa88c2753dbac14a09fd4901890": {
-    "is_live": false,
+    "is_live": true,
     "title": null,
     "category": null,
     "viewers": null,
@@ -36,7 +36,7 @@
     "last_nonempty_category": null
   },
   "28cbc9a7f252b4bccf6fc479caca686e": {
-    "is_live": true,
+    "is_live": false,
     "title": null,
     "category": null,
     "viewers": null,
