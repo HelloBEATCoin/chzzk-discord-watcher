@@ -25,5 +25,23 @@
     "passed_thresholds": [],
     "last_nonempty_title": null,
     "last_nonempty_category": null
+  },
+  "1e546b3f42edad3012dc8a64eca1668d": {
+    "is_live": false,
+    "title": null,
+    "category": null,
+    "viewers": null,
+    "passed_thresholds": [],
+    "last_nonempty_title": null,
+    "last_nonempty_category": null
+  },
+  "28cbc9a7f252b4bccf6fc479caca686e": {
+    "is_live": true,
+    "title": null,
+    "category": null,
+    "viewers": null,
+    "passed_thresholds": [],
+    "last_nonempty_title": null,
+    "last_nonempty_category": null
   }
 }
