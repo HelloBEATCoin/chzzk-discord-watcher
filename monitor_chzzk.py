@@ -41,10 +41,13 @@ Example config.yaml:
 
 """
 
+import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -54,6 +57,25 @@ import yaml
 
 CONFIG_FILE = Path(__file__).with_name("config.yaml")
 STATE_FILE = Path(__file__).with_name("state.json")
+LOGGER = logging.getLogger("chzzk_watcher")
+
+
+def setup_logging(verbose: bool = False) -> None:
+    """Configure process-wide logging."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
+    )
+    logging.Formatter.converter = time.gmtime
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Dict[str, Any]:
@@ -83,7 +105,7 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
         async with session.get(url_live_detail, headers=headers, timeout=10) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                content = data.get("content", {})
+                content = data.get("content") or {}
                 status = content.get("status")
                 # Determine live flag from status field.
                 is_live = False
@@ -100,9 +122,9 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
                     "viewers": viewers,
                     "status": status,
                 }
-    except Exception:
-        # ignore network/parsing errors in this attempt
-        pass
+            LOGGER.debug("live-detail returned HTTP %s for channel=%s", resp.status, channel_id)
+    except Exception as exc:
+        LOGGER.warning("live-detail request failed for channel=%s: %s", channel_id, exc)
 
     # Second attempt: service/v1/channels/{id}
     url_channel = f"{base}/service/v1/channels/{channel_id}"
@@ -110,7 +132,7 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
         async with session.get(url_channel, headers=headers, timeout=10) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                content = data.get("content", {})
+                content = data.get("content") or {}
                 # openLive is True when channel is actively streaming
                 is_live = bool(content.get("openLive"))
                 return {
@@ -120,8 +142,9 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
                     "viewers": None,
                     "status": None,
                 }
-    except Exception:
-        pass
+            LOGGER.debug("channel endpoint returned HTTP %s for channel=%s", resp.status, channel_id)
+    except Exception as exc:
+        LOGGER.warning("channel request failed for channel=%s: %s", channel_id, exc)
 
     # Third attempt: polling/v2/channels/{id}/live-status (may return just status)
     url_polling = f"{base}/polling/v2/channels/{channel_id}/live-status"
@@ -129,7 +152,7 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
         async with session.get(url_polling, headers=headers, timeout=10) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                content = data.get("content", {})
+                content = data.get("content") or {}
                 # status may be ACTIVE / INACTIVE
                 status = content.get("status")
                 is_live = status and status.upper() == "ACTIVE"
@@ -140,11 +163,12 @@ async def fetch_live_info(session: aiohttp.ClientSession, channel_id: str) -> Di
                     "viewers": None,
                     "status": status,
                 }
-    except Exception:
-        pass
+            LOGGER.debug("live-status returned HTTP %s for channel=%s", resp.status, channel_id)
+    except Exception as exc:
+        LOGGER.warning("live-status request failed for channel=%s: %s", channel_id, exc)
 
-    # Default: offline
-    return {"is_live": False}
+    # Avoid turning transient API/network failures into false "stream ended" events.
+    return {"is_live": False, "fetch_error": True}
 
 
 async def enrich_live_meta(
@@ -180,8 +204,8 @@ async def enrich_live_meta(
                     c = d.get("content") or {}
                     title = c.get("liveTitle") or c.get("title")
                     category = c.get("liveCategoryValue") or c.get("videoCategoryValue") or c.get("categoryType") or c.get("liveCategory")
-        except Exception:
-            pass
+        except Exception as exc:
+            LOGGER.debug("metadata enrich live-detail failed for channel=%s: %s", channel_id, exc)
         # 2) live-status (보강)
         if not title or not category:
             try:
@@ -191,8 +215,8 @@ async def enrich_live_meta(
                         c = d.get("content") or {}
                         title = title or c.get("liveTitle")
                         category = category or c.get("liveCategoryValue") or c.get("liveCategory")
-            except Exception:
-                pass
+            except Exception as exc:
+                LOGGER.debug("metadata enrich live-status failed for channel=%s: %s", channel_id, exc)
         if title or category:
             return title, category
         await asyncio.sleep(delay * (i + 1))  # 2s, 4s, 6s...
@@ -215,6 +239,9 @@ def load_config(path: Path) -> Dict[str, Any]:
             env_val = os.environ.get(key)
             if env_val:
                 streamer["webhook_url"] = env_val
+            else:
+                LOGGER.warning("Webhook environment variable %s is not set for %s", key, streamer.get("name"))
+                streamer["webhook_url"] = None
     return cfg
 
 
@@ -230,26 +257,52 @@ def load_state(path: Path) -> Dict[str, Any]:
     return {}
 
 
-def save_state(path: Path, state: Dict[str, Any]) -> None:
+def save_state(path: Path, state: Dict[str, Any]) -> bool:
     """Persist state to disk."""
+    old_data = None
+    if path.exists():
+        old_data = path.read_text(encoding="utf-8")
     tmp = path.with_suffix(".json.tmp")
     with tmp.open("w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    new_data = tmp.read_text(encoding="utf-8")
+    if old_data == new_data:
+        tmp.unlink()
+        return False
     tmp.replace(path)
+    return True
 
 
-async def send_discord_message(session: aiohttp.ClientSession, webhook_url: str, content: str, embed: Optional[Dict[str, Any]]) -> None:
+async def send_discord_message(
+    session: aiohttp.ClientSession,
+    webhook_url: str,
+    content: str,
+    embed: Optional[Dict[str, Any]],
+    dry_run: bool = False,
+) -> bool:
     """Send a message to Discord via webhook."""
+    if dry_run:
+        LOGGER.info(
+            "[dry-run] Discord message skipped: content=%r embed_title=%r",
+            content,
+            embed.get("title") if embed else None,
+        )
+        return True
+
     payload: Dict[str, Any] = {"content": content}
     if embed:
         payload["embeds"] = [embed]
     try:
         async with session.post(webhook_url, json=payload, timeout=10) as resp:
             if resp.status >= 400:
-                text = await resp.text()
-                print(f"Discord webhook responded with status {resp.status}: {text}")
+                LOGGER.error("Discord webhook returned HTTP %s", resp.status)
+                return False
+            LOGGER.info("Discord webhook delivered: status=%s", resp.status)
+            return True
     except Exception as e:
-        print(f"Failed to send Discord message: {e}")
+        LOGGER.error("Discord webhook request failed: %s", e)
+        return False
 
 
 def format_discord_message(event_type: str, streamer: Dict[str, Any], info: Dict[str, Any], last_state: Dict[str, Any], threshold: Optional[int] = None) -> Dict[str, Any]:
@@ -297,19 +350,34 @@ def format_discord_message(event_type: str, streamer: Dict[str, Any], info: Dict
     return {"content": content, "embed": embed}
 
 
-async def process_streamer(session: aiohttp.ClientSession, streamer: Dict[str, Any], thresholds: List[int], state: Dict[str, Any]) -> None:
+async def process_streamer(
+    session: aiohttp.ClientSession,
+    streamer: Dict[str, Any],
+    thresholds: List[int],
+    state: Dict[str, Any],
+    dry_run: bool = False,
+    persist_viewer_count: bool = False,
+) -> bool:
     """Fetch current info for a streamer, detect events, send messages, and update state."""
     channel_id = streamer.get("channel_id")
     if not channel_id:
-        return
+        LOGGER.error("Skipping streamer without channel_id: %s", streamer.get("name"))
+        return False
+
+    name = streamer.get("name") or channel_id
+    LOGGER.info("Checking streamer=%s channel=%s", name, channel_id)
     current = await fetch_live_info(session, channel_id)
+    if current.get("fetch_error"):
+        LOGGER.error("Skipping state update because all Chzzk API attempts failed: streamer=%s", name)
+        return False
+
     streamer_key = channel_id
     last = state.get(streamer_key, {})
     new_state: Dict[str, Any] = {
         "is_live": current.get("is_live", False),
         "title": current.get("title") or last.get("title"),
         "category": current.get("category") or last.get("category"),
-        "viewers": current.get("viewers"),
+        "viewers": current.get("viewers") if persist_viewer_count else None,
         # Track which thresholds have been passed; store as list of ints
         "passed_thresholds": last.get("passed_thresholds", []),
     }
@@ -401,37 +469,98 @@ async def process_streamer(session: aiohttp.ClientSession, streamer: Dict[str, A
         for ev in events:
             info_for_msg = build_current_for_msg(ev["type"])
             msg = format_discord_message(ev["type"], streamer, info_for_msg, last, ev.get("threshold"))
-            await send_discord_message(session, webhook, msg["content"], msg["embed"])
+            ok = await send_discord_message(session, webhook, msg["content"], msg["embed"], dry_run=dry_run)
+            if not ok:
+                return False
             # Slight delay between messages to avoid Discord rate limits
             await asyncio.sleep(1)
+    elif events and dry_run:
+        LOGGER.info(
+            "[dry-run] Events detected but webhook is missing: streamer=%s events=%s",
+            name,
+            [ev["type"] for ev in events],
+        )
+    elif events:
+        LOGGER.error("Events detected but webhook is missing: streamer=%s events=%s", name, [ev["type"] for ev in events])
+        return False
+    else:
+        LOGGER.info(
+            "No notification events: streamer=%s is_live=%s title=%r category=%r viewers=%r",
+            name,
+            new_state["is_live"],
+            new_state.get("title"),
+            new_state.get("category"),
+            current.get("viewers"),
+        )
 
     # Persist updated state
     state[streamer_key] = new_state
+    return True
 
 
-async def main() -> None:
-    cfg = load_config(CONFIG_FILE)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run one Chzzk Discord watcher cycle.")
+    parser.add_argument("config", nargs="?", default=os.environ.get("CONFIG_PATH", str(CONFIG_FILE)))
+    parser.add_argument("--state", default=os.environ.get("STATE_PATH", str(STATE_FILE)))
+    parser.add_argument("--dry-run", action="store_true", default=env_bool("DRY_RUN", False))
+    parser.add_argument("--verbose", action="store_true", default=env_bool("VERBOSE", False))
+    return parser.parse_args()
+
+
+async def main() -> int:
+    args = parse_args()
+    setup_logging(args.verbose)
+
+    config_path = Path(args.config)
+    state_path = Path(args.state)
+    cfg = load_config(config_path)
     if not cfg:
-        print(f"Config file {CONFIG_FILE} not found or empty.")
-        sys.exit(1)
+        LOGGER.error("Config file %s not found or empty.", config_path)
+        return 1
     streamers = cfg.get("streamers", [])
     poll_interval = int(cfg.get("poll_interval_seconds", 300))
     thresholds = cfg.get("viewer_thresholds", [])
+    persist_viewer_count = bool(cfg.get("persist_viewer_count", False))
     # Ensure thresholds are sorted ascending and unique
     thresholds = sorted(set(int(x) for x in thresholds if isinstance(x, (int, float))))
 
-    state = load_state(STATE_FILE)
+    LOGGER.info(
+        "Starting watcher cycle: streamers=%s thresholds=%s poll_interval_seconds=%s dry_run=%s persist_viewer_count=%s",
+        len(streamers),
+        thresholds,
+        poll_interval,
+        args.dry_run,
+        persist_viewer_count,
+    )
+    state = load_state(state_path)
 
     async with aiohttp.ClientSession() as session:
         # Single run fetch (GitHub Actions will schedule periodically)
-        tasks = [process_streamer(session, s, thresholds, state) for s in streamers]
-        await asyncio.gather(*tasks)
+        tasks = [
+            process_streamer(
+                session,
+                s,
+                thresholds,
+                state,
+                dry_run=args.dry_run,
+                persist_viewer_count=persist_viewer_count,
+            )
+            for s in streamers
+        ]
+        results = await asyncio.gather(*tasks)
     # Save state after run
-    save_state(STATE_FILE, state)
+    if args.dry_run:
+        changed = False
+        LOGGER.info("[dry-run] State write skipped: %s", state_path)
+    else:
+        changed = save_state(state_path, state)
+        LOGGER.info("State %s: %s", "updated" if changed else "unchanged", state_path)
+    return 0 if all(results) else 1
 
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        sys.exit(asyncio.run(main()))
     except KeyboardInterrupt:
-        pass
+        LOGGER.info("Interrupted")
+        sys.exit(130)

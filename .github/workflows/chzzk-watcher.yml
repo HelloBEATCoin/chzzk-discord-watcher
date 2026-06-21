@@ -3,7 +3,11 @@ name: Chzzk Watcher
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"   # 5분 간격
+    - cron: "*/5 * * * *"   # GitHub Actions scheduler may delay scheduled runs.
+
+concurrency:
+  group: chzzk-watcher-main
+  cancel-in-progress: false
 
 jobs:
   run:
@@ -30,14 +34,11 @@ jobs:
           WEBHOOK_YEONSOHWA: ${{ secrets.WEBHOOK_YEONSOHWA }}
           STATE_PATH: state.json
         run: |
-          python monitor_chzzk.py config.yaml &   # 즉시 1회 실행
-          pid=$!
-          sleep 20                                # 1사이클 돌릴 시간
-          kill $pid || true
+          python monitor_chzzk.py config.yaml --state "$STATE_PATH"
 
       - name: Commit state if changed
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
+          if ! git diff --quiet -- state.json; then
             git config user.name "github-actions"
             git config user.email "actions@github.com"
             git add state.json
