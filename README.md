@@ -28,8 +28,8 @@ CHZZK 채널 상태를 주기적으로 확인하고 Discord webhook으로 방송
 필요한 GitHub Secrets:
 
 - `WEBHOOK_MBEUNG`
-- `WEBHOOK_NARI` - 연후/규비 알림에 사용
 - `WEBHOOK_YEONSOHWA`
+- `WEBHOOK_YEONHU_GYUBI` - 연후/규비 알림에 사용
 
 주요 옵션:
 
@@ -91,8 +91,8 @@ python monitor_chzzk.py config.yaml --state state.json --dry-run
 상시 실행 환경 변수:
 
 - `WEBHOOK_MBEUNG`
-- `WEBHOOK_NARI`
 - `WEBHOOK_YEONSOHWA`
+- `WEBHOOK_YEONHU_GYUBI`
 - `CONFIG_PATH` optional
 - `STATE_PATH` optional
 - `DRY_RUN` optional

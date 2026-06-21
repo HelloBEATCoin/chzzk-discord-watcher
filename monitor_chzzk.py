@@ -33,10 +33,10 @@ Example config.yaml:
         chzzk_url: https://chzzk.naver.com/a872c0594e60f943748d76c565dd3a07
         webhook_url: ${WEBHOOK_MBEUNG}
         discord_role_id: null
-      - name: Nari
-        channel_id: 1755e5012c4dcd4eb94aec03205d6201
-        chzzk_url: https://chzzk.naver.com/1755e5012c4dcd4eb94aec03205d6201
-        webhook_url: ${WEBHOOK_NARI}
+      - name: Yeonhu
+        channel_id: 1e546b3f42edad3012dc8a64eca1668d
+        chzzk_url: https://chzzk.naver.com/1e546b3f42edad3012dc8a64eca1668d
+        webhook_url: ${WEBHOOK_YEONHU_GYUBI}
         discord_role_id: null
 
 """
