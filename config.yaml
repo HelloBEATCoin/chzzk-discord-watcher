@@ -35,10 +35,10 @@ streamers:
   - name: 연후
     channel_id: 1e546b3f42edad3012dc8a64eca1668d
     chzzk_url: https://chzzk.naver.com/1e546b3f42edad3012dc8a64eca1668d
-    webhook_url: ${WEBHOOK_YEONHU_GYUBI}
+    webhook_url: ${WEBHOOK_YEONHU}
     discord_role_id: null
   - name: 규비
     channel_id: 28cbc9a7f252b4bccf6fc479caca686e
     chzzk_url: https://chzzk.naver.com/28cbc9a7f252b4bccf6fc479caca686e
-    webhook_url: ${WEBHOOK_YEONHU_GYUBI}
+    webhook_url: ${WEBHOOK_GYUBI}
     discord_role_id: null

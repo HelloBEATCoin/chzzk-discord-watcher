@@ -36,7 +36,7 @@ Example config.yaml:
       - name: Yeonhu
         channel_id: 1e546b3f42edad3012dc8a64eca1668d
         chzzk_url: https://chzzk.naver.com/1e546b3f42edad3012dc8a64eca1668d
-        webhook_url: ${WEBHOOK_YEONHU_GYUBI}
+        webhook_url: ${WEBHOOK_YEONHU}
         discord_role_id: null
 
 """
@@ -294,7 +294,8 @@ async def send_discord_message(
     if embed:
         payload["embeds"] = [embed]
     try:
-        async with session.post(webhook_url, json=payload, timeout=10) as resp:
+        headers = {"User-Agent": "chzzk-discord-watcher/1.0"}
+        async with session.post(webhook_url, json=payload, headers=headers, timeout=10) as resp:
             if resp.status >= 400:
                 LOGGER.error("Discord webhook returned HTTP %s", resp.status)
                 return False

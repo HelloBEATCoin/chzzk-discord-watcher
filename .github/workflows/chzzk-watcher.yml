@@ -31,7 +31,8 @@ jobs:
         env:
           WEBHOOK_MBEUNG: ${{ secrets.WEBHOOK_MBEUNG }}
           WEBHOOK_YEONSOHWA: ${{ secrets.WEBHOOK_YEONSOHWA }}
-          WEBHOOK_YEONHU_GYUBI: ${{ secrets.WEBHOOK_YEONHU_GYUBI || secrets.WEBHOOK_NARI }}
+          WEBHOOK_YEONHU: ${{ secrets.WEBHOOK_YEONHU }}
+          WEBHOOK_GYUBI: ${{ secrets.WEBHOOK_GYUBI }}
           STATE_PATH: state.json
         run: |
           python monitor_chzzk.py config.yaml --state "$STATE_PATH"
