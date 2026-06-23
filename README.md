@@ -36,7 +36,7 @@ CHZZK 채널 상태를 주기적으로 확인하고 Discord webhook으로 방송
 
 - `viewer_thresholds`: 시청자 수가 해당 값을 처음 넘을 때 알림을 보냅니다.
 - `persist_viewer_count`: 기본값 `false`. live 중 시청자 수 변화만으로 `state.json` 커밋이 계속 생기지 않게 합니다.
-- `poll_interval_seconds`: 상시 실행 환경에서 사용할 폴링 간격입니다. 현재 GitHub Actions 단발 실행에서는 cron 설정이 실제 실행 간격을 결정합니다.
+- `poll_interval_seconds`: 상시 실행 환경에서 사용할 폴링 간격입니다. 현재 GitHub Actions 운영은 workflow 내부 루프가 5분 간격을 담당합니다.
 
 ## 로컬 실행
 
@@ -51,20 +51,23 @@ python monitor_chzzk.py config.yaml --state state.json --dry-run
 
 ## GitHub Actions 운영
 
-현재 workflow는 `.github/workflows/chzzk-watcher.yml`에서 `*/5 * * * *` cron으로 실행됩니다. 실행 후 `state.json`이 변경되면 main 브랜치에 `chore(state)` 커밋을 남깁니다.
+현재 workflow는 `.github/workflows/chzzk-watcher.yml`에서 매시간 한 번 시작되고, job 내부에서 5분 간격으로 최대 12회 watcher를 실행합니다. 각 cycle 후 `state.json`이 변경되면 main 브랜치에 `chore(state)` 커밋을 남깁니다.
+
+수동 실행 시 `cycles` 입력으로 반복 횟수를 줄일 수 있습니다. 예를 들어 테스트는 `cycles=1`로 실행하면 한 번만 확인하고 종료합니다.
 
 주의할 점:
 
 - GitHub Actions의 scheduled workflow는 정확한 5분 타이머가 아닙니다.
 - 공개/무료 shared runner 상황, GitHub 부하, repository activity, queue 상태에 따라 실행이 지연될 수 있습니다.
 - cron은 "최소 예약 시각"에 가깝고, 실제 시작 시각은 1시간 이상 밀릴 수 있습니다.
-- 따라서 방송 시작 직후 알림이 반드시 필요하면 GitHub Actions만으로는 부족합니다.
+- 이 repo는 GitHub schedule이 실제로 1~6시간까지 밀린 이력이 있어, workflow 내부에서 5분 루프를 돌려 지연을 완화합니다.
+- 그래도 scheduled workflow 자체가 몇 시간 동안 시작되지 않는 경우까지 완전히 해결하지는 못합니다.
 
 ## 최소 개선안
 
 현재 구조를 유지하면서 적용할 수 있는 개선입니다.
 
-- workflow를 단발 실행으로 단순화합니다. 백그라운드 실행 후 `kill`하는 방식은 사용하지 않습니다.
+- workflow를 명시적인 cycle 루프로 구성합니다. 백그라운드 실행 후 `kill`하는 방식은 사용하지 않습니다.
 - `state.json`만 변경됐을 때만 커밋합니다.
 - `persist_viewer_count: false`로 시청자 수 변동만으로 발생하는 커밋 노이즈를 줄입니다.
 - transient API 실패를 방송 종료로 오인하지 않도록, 모든 API 조회가 실패하면 state 갱신을 건너뜁니다.
