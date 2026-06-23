@@ -2,13 +2,8 @@ name: Chzzk Watcher
 
 on:
   workflow_dispatch:
-    inputs:
-      cycles:
-        description: "Number of 5-minute watcher cycles to run (1-12)"
-        required: false
-        default: "12"
   schedule:
-    - cron: "7 * * * *"   # Start away from minute 0, then poll every 5 minutes inside the job.
+    - cron: "7 * * * *"   # Backup schedule. Local launchd triggers the primary 5-minute cadence.
 
 concurrency:
   group: chzzk-watcher-main
@@ -17,7 +12,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 10
     permissions:
       contents: write     # state.json 커밋하려면 write 권한 필요
     steps:
@@ -36,40 +31,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install aiohttp pyyaml python-dotenv
 
-      - name: Run watcher cycles
+      - name: Run watcher once
         env:
           WEBHOOK_MBEUNG: ${{ secrets.WEBHOOK_MBEUNG }}
           WEBHOOK_YEONSOHWA: ${{ secrets.WEBHOOK_YEONSOHWA }}
           WEBHOOK_YEONHU: ${{ secrets.WEBHOOK_YEONHU }}
           WEBHOOK_GYUBI: ${{ secrets.WEBHOOK_GYUBI }}
           STATE_PATH: state.json
-          CYCLES: ${{ github.event.inputs.cycles || '12' }}
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git pull --ff-only origin main
 
-          cycles="$CYCLES"
-          if ! [[ "$cycles" =~ ^[0-9]+$ ]] || [ "$cycles" -lt 1 ] || [ "$cycles" -gt 12 ]; then
-            echo "Invalid cycles value '$cycles'; using 12"
-            cycles=12
+          python monitor_chzzk.py config.yaml --state "$STATE_PATH"
+
+          if ! git diff --quiet -- "$STATE_PATH"; then
+            git add "$STATE_PATH"
+            git commit -m "chore(state): update at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            git pull --rebase origin main
+            git push
+          else
+            echo "No state changes"
           fi
-
-          for cycle in $(seq 1 "$cycles"); do
-            echo "::group::Watcher cycle $cycle/$cycles"
-            python monitor_chzzk.py config.yaml --state "$STATE_PATH"
-
-            if ! git diff --quiet -- "$STATE_PATH"; then
-              git add "$STATE_PATH"
-              git commit -m "chore(state): update at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-              git pull --rebase origin main
-              git push
-            else
-              echo "No state changes"
-            fi
-            echo "::endgroup::"
-
-            if [ "$cycle" -lt "$cycles" ]; then
-              sleep 300
-            fi
-          done
