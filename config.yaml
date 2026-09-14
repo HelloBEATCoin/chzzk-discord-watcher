@@ -32,7 +32,7 @@ streamers:
     chzzk_url: https://chzzk.naver.com/bc630aa88c2753dbac14a09fd4901890
     webhook_url: ${WEBHOOK_YEONSOHWA}
     discord_role_id: null
-  - name: 연후
+  - name: 쵸밍
     channel_id: 1e546b3f42edad3012dc8a64eca1668d
     chzzk_url: https://chzzk.naver.com/1e546b3f42edad3012dc8a64eca1668d
     webhook_url: ${WEBHOOK_YEONHU}
