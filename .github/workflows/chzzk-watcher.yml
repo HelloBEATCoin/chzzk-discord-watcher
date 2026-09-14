@@ -37,6 +37,7 @@ jobs:
           WEBHOOK_YEONSOHWA: ${{ secrets.WEBHOOK_YEONSOHWA }}
           WEBHOOK_YEONHU: ${{ secrets.WEBHOOK_YEONHU }}
           WEBHOOK_GYUBI: ${{ secrets.WEBHOOK_GYUBI }}
+          WEBHOOK_SHINOMIYA_KANA: ${{ secrets.WEBHOOK_SHINOMIYA_KANA }}
           STATE_PATH: state.json
         run: |
           git config user.name "github-actions"

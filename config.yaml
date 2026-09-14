@@ -42,3 +42,8 @@ streamers:
     chzzk_url: https://chzzk.naver.com/28cbc9a7f252b4bccf6fc479caca686e
     webhook_url: ${WEBHOOK_GYUBI}
     discord_role_id: null
+  - name: 시노미야 카나
+    channel_id: dae941286535b489b5282a8910fb0363
+    chzzk_url: https://chzzk.naver.com/dae941286535b489b5282a8910fb0363
+    webhook_url: ${WEBHOOK_SHINOMIYA_KANA}
+    discord_role_id: null

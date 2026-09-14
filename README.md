@@ -18,6 +18,7 @@ CHZZK 채널 상태를 주기적으로 확인하고 Discord webhook으로 방송
 | 연소화 | `bc630aa88c2753dbac14a09fd4901890` |
 | 연후 | `1e546b3f42edad3012dc8a64eca1668d` |
 | 규비 | `28cbc9a7f252b4bccf6fc479caca686e` |
+| 시노미야 카나 | `dae941286535b489b5282a8910fb0363` |
 
 ## 설정
 
@@ -31,6 +32,7 @@ CHZZK 채널 상태를 주기적으로 확인하고 Discord webhook으로 방송
 - `WEBHOOK_YEONSOHWA`
 - `WEBHOOK_YEONHU`
 - `WEBHOOK_GYUBI`
+- `WEBHOOK_SHINOMIYA_KANA`
 
 주요 옵션:
 
@@ -121,6 +123,7 @@ tail -f logs/launchd-trigger.err.log
 - `WEBHOOK_YEONSOHWA`
 - `WEBHOOK_YEONHU`
 - `WEBHOOK_GYUBI`
+- `WEBHOOK_SHINOMIYA_KANA`
 - `CONFIG_PATH` optional
 - `STATE_PATH` optional
 - `DRY_RUN` optional
